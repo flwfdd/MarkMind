@@ -1,0 +1,1 @@
+"""MarkMind Backend Application"""

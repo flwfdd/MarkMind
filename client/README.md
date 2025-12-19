@@ -41,6 +41,18 @@ pnpm install
 pnpm dev
 ```
 
+### Environment variables
+
+This client reads configuration from Vite environment variables. To set them locally, copy `client/.env.example` to `client/.env` (or `.env.local`) and update values.
+
+- `VITE_API_BASE` — base URL for the backend API (defaults to `http://127.0.0.1:8080/api` when not set).
+
+Example:
+
+```env
+VITE_API_BASE=http://127.0.0.1:8080/api
+```
+
 ### Type-Check, Compile and Minify for Production
 
 ```sh
