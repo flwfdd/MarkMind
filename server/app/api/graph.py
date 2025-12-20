@@ -1,5 +1,6 @@
 """Graph API - Knowledge graph interaction"""
 
+from datetime import datetime as _dt
 from typing import Optional
 
 from app.database import db
@@ -18,6 +19,12 @@ from fastapi import APIRouter, HTTPException
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
+def _format_created_at(val):
+    if isinstance(val, _dt):
+        return val.isoformat()
+    return val
+
+
 def format_node(node_data: dict, node_type: str) -> GraphNode:
     """Format database node to GraphNode"""
     # Ensure id is a string (RecordID from SurrealDB may be returned)
@@ -28,9 +35,9 @@ def format_node(node_data: dict, node_type: str) -> GraphNode:
             type="doc",
             label=node_data.get("title", "Untitled"),
             desc=node_data.get("summary", ""),
-            meta=node_data.get("meta", {}),
+            url=node_data.get("url", None),
             doc_type=node_data.get("type"),
-            created_at=node_data.get("created_at"),
+            created_at=_format_created_at(node_data.get("created_at")),
         )
     else:  # concept
         concept_name = node_data.get("name", "")

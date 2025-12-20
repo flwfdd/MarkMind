@@ -5,7 +5,9 @@ import os
 from typing import Optional
 
 import aiofiles
+import aiohttp
 from app.config import settings
+from app.utils import sanitize_text
 from pypdf import PdfReader
 
 
@@ -58,4 +60,50 @@ async def process_file(
         except:
             content = file_content.decode("utf-8", errors="ignore")
 
+    # Sanitize extracted content to remove problematic characters
+    content = sanitize_text(content)
+
     return title, content
+
+
+async def fetch_url_content(url: str) -> tuple[str, str, str]:
+    """Fetch content from URL and convert to markdown if HTML
+
+    Returns:
+        tuple of (title, content, detected_type)
+    """
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=30)
+        ) as response:
+            content_type = response.headers.get("Content-Type", "").lower()
+            content_bytes = await response.read()
+
+            # Handle PDF
+            if "application/pdf" in content_type or url.lower().endswith(".pdf"):
+                title = url.split("/")[-1].replace(".pdf", "")
+                content = await extract_text_from_pdf(content_bytes)
+                return title, content, "pdf"
+
+            # Handle HTML - convert to markdown
+            elif "text/html" in content_type:
+                from markdownify import markdownify as md
+
+                html_content = content_bytes.decode("utf-8", errors="ignore")
+                content = md(html_content, heading_style="ATX")
+
+                # Try to extract title from HTML
+                import re
+
+                title_match = re.search(
+                    r"<title>(.*?)</title>", html_content, re.IGNORECASE
+                )
+                title = title_match.group(1) if title_match else url.split("/")[-1]
+
+                return title, content, "md"
+
+            # Handle plain text/markdown
+            else:
+                content = content_bytes.decode("utf-8", errors="ignore")
+                title = url.split("/")[-1]
+                return title, content, "text"

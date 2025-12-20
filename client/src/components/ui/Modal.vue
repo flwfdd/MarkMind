@@ -7,9 +7,10 @@ import Button from './Button.vue'
 interface Props {
     open: boolean
     class?: string
+    hideClose?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), { hideClose: false })
 const emit = defineEmits<{
     'update:open': [value: boolean]
 }>()
@@ -44,9 +45,11 @@ function handleBackdropClick(e: MouseEvent) {
                     props.class,
                 )
                     ">
-                    <Button variant="ghost" size="icon" class="absolute right-4 top-4" @click="close">
-                        <X class="h-4 w-4" />
-                    </Button>
+                    <template v-if="!props.hideClose">
+                        <Button variant="ghost" size="icon" class="absolute right-4 top-4" @click="close">
+                            <X class="h-4 w-4" />
+                        </Button>
+                    </template>
                     <slot />
                 </div>
             </div>

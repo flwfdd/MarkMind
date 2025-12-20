@@ -4,6 +4,10 @@ import type {
     SearchRequest,
     SearchResult,
     ChatRequest,
+    ParseRequest,
+    ParseResponse,
+    DocumentPreview,
+    ConfirmImportRequest,
 } from '@/types'
 
 // API base can be configured via Vite env var `VITE_API_BASE` (e.g. in .env)
@@ -50,14 +54,14 @@ export async function uploadDocument(
     title?: string | null,
     content?: string | null,
     type: string = 'text',
-    meta?: string | null,
+    url?: string | null,
 ): Promise<unknown> {
     const formData = new FormData()
     if (file) formData.append('file', file)
     if (title) formData.append('title', title)
     if (content) formData.append('content', content)
     formData.append('type', type)
-    if (meta) formData.append('meta', meta)
+    if (url) formData.append('url', url)
 
     const res = await fetch(`${API_BASE}/ingest/upload`, {
         method: 'POST',
@@ -74,5 +78,46 @@ export async function deleteDocument(docId: string): Promise<unknown> {
     if (!res.ok) {
         throw new Error('Failed to delete document')
     }
+    return res.json()
+}
+
+// Import API
+export async function parseDocument(request: ParseRequest): Promise<ParseResponse> {
+    const res = await fetch(`${API_BASE}/ingest/parse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+    })
+    if (!res.ok) throw new Error('Failed to parse document')
+    return res.json()
+}
+
+export async function previewDocument(
+    title: string,
+    content: string,
+    type: string,
+    url?: string | null,
+): Promise<DocumentPreview> {
+    const formData = new FormData()
+    formData.append('title', title)
+    formData.append('content', content)
+    formData.append('type', type)
+    if (url) formData.append('url', url)
+
+    const res = await fetch(`${API_BASE}/ingest/preview`, {
+        method: 'POST',
+        body: formData,
+    })
+    if (!res.ok) throw new Error('Failed to preview document')
+    return res.json()
+}
+
+export async function confirmImport(request: ConfirmImportRequest): Promise<unknown> {
+    const res = await fetch(`${API_BASE}/ingest/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+    })
+    if (!res.ok) throw new Error('Failed to confirm import')
     return res.json()
 }

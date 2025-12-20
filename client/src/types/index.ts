@@ -4,7 +4,7 @@ export interface GraphNode {
     type: string
     label: string
     desc?: string | null
-    meta?: Record<string, unknown> | null
+    url?: string | undefined
     doc_type?: string | null
     created_at?: string | null
 }
@@ -78,5 +78,58 @@ export interface UploadRequest {
     title?: string | null
     content?: string | null
     type?: string
-    meta?: string | null
+    url?: string | undefined
+}
+
+// Import document types
+export interface ParseRequest {
+    url?: string | null
+    file_content?: string | null
+    file_name?: string | null
+    file_type?: string | null
+}
+
+export interface ParseResponse {
+    title: string
+    content: string
+    type: string
+    url?: string | undefined
+}
+
+export interface ExtractedConcept {
+    name: string
+    desc: string
+}
+
+export interface ExtractedRelation {
+    from_concept: string
+    to_concept: string
+    desc: string
+}
+
+export interface ConceptResponse {
+    id: string
+    name: string
+    desc: string
+}
+
+export interface DocumentPreview {
+    title: string
+    summary: string
+    content: string
+    type: string
+    url?: string | undefined
+    concepts: ExtractedConcept[]
+    relations: ExtractedRelation[]
+    existing_concepts: ConceptResponse[]
+}
+
+export interface ConfirmImportRequest {
+    title: string
+    summary: string
+    content: string
+    type: string
+    url?: string | undefined
+    concepts: ExtractedConcept[]
+    relations: ExtractedRelation[]
 }

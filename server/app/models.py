@@ -12,7 +12,7 @@ class DocumentCreate(BaseModel):
     title: str
     content: str
     type: str = Field(..., pattern="^(pdf|md|xhs|text)$")
-    meta: Optional[dict[str, Any]] = None
+    url: Optional[str] = None
 
 
 class DocumentResponse(BaseModel):
@@ -24,7 +24,7 @@ class DocumentResponse(BaseModel):
     content: str
     type: str
     created_at: datetime
-    meta: Optional[dict[str, Any]] = None
+    url: Optional[str] = None
 
 
 class ConceptResponse(BaseModel):
@@ -42,7 +42,7 @@ class GraphNode(BaseModel):
     type: str  # 'doc' or 'concept'
     label: str  # title or concept name
     desc: Optional[str] = None  # summary or concept desc
-    meta: Optional[dict[str, Any]] = None
+    url: Optional[str] = None
     doc_type: Optional[str] = None  # For documents: 'pdf' | 'md' | 'xhs' | 'text'
     created_at: Optional[datetime] = None
 
@@ -129,3 +129,61 @@ class ChatStreamEvent(BaseModel):
     messages: Optional[list[ChatMessage]] = None
     # For error
     error: Optional[str] = None
+
+
+class ParseRequest(BaseModel):
+    """Parse request for document import"""
+
+    url: Optional[str] = None  # URL to fetch content from
+    file_content: Optional[str] = None  # Base64 encoded file content
+    file_name: Optional[str] = None  # Original filename
+    file_type: Optional[str] = None  # pdf, txt, md, html
+
+
+class ParseResponse(BaseModel):
+    """Parse response with extracted info"""
+
+    title: str
+    content: str
+    type: str
+    url: Optional[str] = None
+
+
+class ExtractedConcept(BaseModel):
+    """Extracted concept schema"""
+
+    name: str
+    desc: str
+
+
+class ExtractedRelation(BaseModel):
+    """Extracted relation schema"""
+
+    from_concept: str  # concept name
+    to_concept: str  # concept name
+    desc: str
+
+
+class DocumentPreview(BaseModel):
+    """Document preview before final import"""
+
+    title: str
+    summary: str
+    content: str
+    type: str
+    url: Optional[str] = None
+    concepts: list[ExtractedConcept]  # Newly extracted concepts
+    relations: list[ExtractedRelation]  # Relations between concepts
+    existing_concepts: list[ConceptResponse]  # Existing concepts matched
+
+
+class ConfirmImportRequest(BaseModel):
+    """Confirm and finalize document import"""
+
+    title: str
+    summary: str
+    content: str
+    type: str
+    url: Optional[str] = None
+    concepts: list[ExtractedConcept]
+    relations: list[ExtractedRelation]

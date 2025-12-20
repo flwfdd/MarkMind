@@ -39,5 +39,8 @@ class Settings(BaseSettings):
     # Vector dimension
     embedding_dimension: int = 1024
 
+    # Embedding API batch size (max items per request)
+    embedding_batch_size: int = 10
+
 
 settings = Settings()

@@ -29,7 +29,7 @@ Neural networks are a key technique in modern machine learning, inspired by the 
         summary=ml_summary,
         content=ml_content,
         doc_type="text",
-        meta={"author": "System", "source": "mock"},
+        url="https://example.com/machine-learning-intro",
     )
 
     # Mock Document 2: Deep Learning
@@ -46,7 +46,7 @@ Deep learning has revolutionized many fields including computer vision, natural 
         summary=dl_summary,
         content=dl_content,
         doc_type="text",
-        meta={"author": "System", "source": "mock"},
+        url=None,
     )
 
     # Mock Document 3: Natural Language Processing
@@ -63,7 +63,7 @@ The transformer architecture, introduced in 2017, has become the dominant paradi
         summary=nlp_summary,
         content=nlp_content,
         doc_type="text",
-        meta={"author": "System", "source": "mock"},
+        url=None,
     )
 
     print("Creating mock concepts...")

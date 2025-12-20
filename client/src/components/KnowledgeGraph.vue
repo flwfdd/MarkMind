@@ -82,16 +82,43 @@ async function loadGraph() {
             })
         })
 
-        // Add edges
+        // Add edges (skip duplicates; if an edge exists update its attributes)
         data.edges.forEach((edge, index) => {
-            if (graphInstance!.hasNode(edge.source) && graphInstance!.hasNode(edge.target)) {
-                graphInstance!.addEdge(edge.source, edge.target, {
-                    size: 1.5,
-                    color: getEdgeColor(edge.type),
-                    edgeType: edge.type,
-                    originalColor: getEdgeColor(edge.type),
+            if (!graphInstance!.hasNode(edge.source) || !graphInstance!.hasNode(edge.target)) return
+
+            // If an edge already exists between these nodes, update its attrs
+            try {
+                // Try to get the existing edge key for simple graphs
+                const existingKey = graphInstance!.edge(edge.source, edge.target)
+                if (existingKey && graphInstance!.hasEdge(existingKey)) {
+                    graphInstance!.setEdgeAttribute(existingKey, 'edgeType', edge.type)
+                    graphInstance!.setEdgeAttribute(existingKey, 'color', getEdgeColor(edge.type))
+                    graphInstance!.setEdgeAttribute(existingKey, 'originalColor', getEdgeColor(edge.type))
+                    return
+                }
+            } catch (e) {
+                // Some graphology implementations may throw (e.g., multigraph) — fallback to scanning edges
+                let foundKey: string | null = null
+                graphInstance!.forEachEdge((ek, attrs, s, t) => {
+                    if ((s === edge.source && t === edge.target) || (s === edge.target && t === edge.source)) {
+                        foundKey = ek
+                    }
                 })
+                if (foundKey && graphInstance!.hasEdge(foundKey)) {
+                    graphInstance!.setEdgeAttribute(foundKey, 'edgeType', edge.type)
+                    graphInstance!.setEdgeAttribute(foundKey, 'color', getEdgeColor(edge.type))
+                    graphInstance!.setEdgeAttribute(foundKey, 'originalColor', getEdgeColor(edge.type))
+                    return
+                }
             }
+
+            // Create new edge
+            graphInstance!.addEdge(edge.source, edge.target, {
+                size: 1.5,
+                color: getEdgeColor(edge.type),
+                edgeType: edge.type,
+                originalColor: getEdgeColor(edge.type),
+            })
         })
 
         // Create sigma instance

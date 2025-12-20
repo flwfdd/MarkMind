@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import Modal from '@/components/ui/Modal.vue'
 import Badge from '@/components/ui/Badge.vue'
 import Spinner from '@/components/ui/Spinner.vue'
@@ -62,6 +62,39 @@ function handleAddToContext(node: GraphNode) {
         emit('add-to-context', node)
     }, 200)
 }
+
+// Helpers for linkifying text safely (escape + URL -> <a ...>)
+function escapeHtml(str: string) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+}
+
+const urlRegex = /((?:https?:\/\/|www\.)[^\s"'<>]+)/gi
+
+function linkify(text: string) {
+    if (!text) return ''
+    const escaped = escapeHtml(text)
+    return escaped.replace(urlRegex, (m) => {
+        const href = m.startsWith('http') ? m : `https://${m}`
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-stone-600 underline">${m}</a>`
+    })
+}
+
+const linkifiedDesc = computed(() => {
+    return detail.value && detail.value.node && detail.value.node.desc
+        ? linkify(detail.value.node.desc)
+        : ''
+})
+
+const linkifiedFullContent = computed(() => {
+    if (!detail.value || !detail.value.full_content) return ''
+    // Keep original newlines and rely on CSS 'whitespace-pre-wrap' to preserve line breaks
+    return linkify(detail.value.full_content)
+})
 </script>
 
 <template>
@@ -92,9 +125,11 @@ function handleAddToContext(node: GraphNode) {
                 <h2 class="mt-2 text-xl font-semibold text-stone-800">
                     {{ detail.node.label }}
                 </h2>
-                <p v-if="detail.node.desc" class="mt-1 text-stone-500">
-                    {{ detail.node.desc }}
-                </p>
+                <p v-if="detail.node.desc" class="mt-1 text-stone-500" v-html="linkifiedDesc"></p>
+                <a v-if="detail.node.url" :href="detail.node.url" target="_blank" rel="noopener noreferrer"
+                    class="text-sm text-stone-600 underline">
+                    {{ detail.node.url }}
+                </a>
                 <p v-if="detail.node.created_at" class="mt-1 text-xs text-stone-400">
                     创建于: {{ new Date(detail.node.created_at).toLocaleString() }}
                 </p>
@@ -102,22 +137,7 @@ function handleAddToContext(node: GraphNode) {
 
             <!-- Content -->
             <div v-if="detail.full_content" class="max-h-64 overflow-y-auto rounded-lg bg-stone-100 p-4">
-                <pre class="whitespace-pre-wrap text-sm text-stone-700">{{
-                    detail.full_content
-                }}</pre>
-            </div>
-
-            <!-- Metadata -->
-            <div v-if="detail.node.meta && Object.keys(detail.node.meta).length > 0">
-                <h3 class="mb-2 font-medium text-stone-700">元数据</h3>
-                <div class="rounded-lg bg-stone-100 p-3">
-                    <dl class="space-y-1 text-sm">
-                        <div v-for="(value, key) in detail.node.meta" :key="key" class="flex gap-2">
-                            <dt class="font-medium text-stone-600">{{ key }}:</dt>
-                            <dd class="text-stone-500">{{ value }}</dd>
-                        </div>
-                    </dl>
-                </div>
+                <div class="whitespace-pre-wrap text-sm text-stone-700" v-html="linkifiedFullContent"></div>
             </div>
 
             <!-- Recommendations -->

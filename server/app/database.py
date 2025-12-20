@@ -1,6 +1,6 @@
 """Database connection and operations - Optimized for SurrealDB"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.config import settings
@@ -55,7 +55,7 @@ class Database:
             DEFINE FIELD IF NOT EXISTS content ON TABLE doc TYPE string;
             DEFINE FIELD IF NOT EXISTS type ON TABLE doc TYPE string ASSERT $value IN ['pdf', 'md', 'xhs', 'text'];
             DEFINE FIELD IF NOT EXISTS created_at ON TABLE doc TYPE datetime DEFAULT time::now();
-            DEFINE FIELD IF NOT EXISTS meta ON TABLE doc TYPE option<object>;
+            DEFINE FIELD IF NOT EXISTS url ON TABLE doc TYPE option<string>;
         """
         )
 
@@ -103,7 +103,7 @@ class Database:
         summary: str,
         content: str,
         doc_type: str,
-        meta: Optional[dict] = None,
+        url: Optional[str] = None,
     ) -> str:
         """Create a new document (no embedding, search via chunks)"""
         if self.conn is None:
@@ -115,7 +115,7 @@ class Database:
                 summary: $summary,
                 content: $content,
                 type: $type,
-                meta: $meta,
+                url: $url,
                 created_at: $created_at
             }
             """,
@@ -124,8 +124,8 @@ class Database:
                 "summary": summary,
                 "content": content,
                 "type": doc_type,
-                "meta": meta or {},
-                "created_at": datetime.now(),  # type: ignore
+                "url": url,
+                "created_at": datetime.now(timezone.utc),  # type: ignore
             },
         )
         # conn.query returns a list with result list
@@ -223,24 +223,119 @@ class Database:
 
         return ""
 
-    def create_mention(self, doc_id: str, concept_id: str, desc: Optional[str] = None):
-        """Create a mentions edge"""
+    def create_mention(
+        self, doc_id: str, concept_id: str, desc: Optional[str] = None
+    ) -> bool:
+        """Create a mentions edge if it does not already exist. Returns True if created, False if skipped."""
         if self.conn is None:
-            return
+            return False
+
+        # Parse record ids into table and id parts
+        if ":" in doc_id:
+            in_table, in_id = doc_id.split(":", 1)
+        else:
+            in_table, in_id = "doc", doc_id
+
+        if ":" in concept_id:
+            out_table, out_id = concept_id.split(":", 1)
+        else:
+            out_table, out_id = "concept", concept_id
+
+        # Check if the mentions relation already exists
+        try:
+            res = self.conn.query(
+                "SELECT * FROM mentions WHERE `in` = type::thing($in_table, $in_id) AND `out` = type::thing($out_table, $out_id)",
+                {
+                    "in_table": in_table,
+                    "in_id": in_id,
+                    "out_table": out_table,
+                    "out_id": out_id,
+                },
+            )
+        except Exception:
+            res = None
+
+        # Normalize result and determine existence
+        exists = False
+        if isinstance(res, list) and len(res) > 0:
+            first = res[0]
+            if (
+                isinstance(first, dict)
+                and "result" in first
+                and isinstance(first["result"], list)
+            ):
+                exists = len(first["result"]) > 0
+            elif isinstance(first, list):
+                exists = len(first) > 0
+            elif all(isinstance(item, dict) for item in res):
+                exists = len(res) > 0
+
+        if exists:
+            return False
+
+        # Create the relation
         self.conn.query(
-            f"RELATE {doc_id}->mentions->{concept_id} SET desc = $desc", {"desc": desc}
+            f"RELATE {doc_id}->mentions->{concept_id} SET desc = $desc",
+            {"desc": desc},
         )
+        return True
 
     def create_related(
         self, concept1_id: str, concept2_id: str, desc: Optional[str] = None
-    ):
-        """Create a related edge"""
+    ) -> bool:
+        """Create a related edge if it does not already exist. Returns True if created, False if skipped."""
         if self.conn is None:
-            return
+            return False
+
+        # Parse record ids into table and id parts
+        if ":" in concept1_id:
+            in_table, in_id = concept1_id.split(":", 1)
+        else:
+            in_table, in_id = "concept", concept1_id
+
+        if ":" in concept2_id:
+            out_table, out_id = concept2_id.split(":", 1)
+        else:
+            out_table, out_id = "concept", concept2_id
+
+        # Check if the related relation already exists
+        try:
+            res = self.conn.query(
+                "SELECT * FROM related WHERE `in` = type::thing($in_table, $in_id) AND `out` = type::thing($out_table, $out_id)",
+                {
+                    "in_table": in_table,
+                    "in_id": in_id,
+                    "out_table": out_table,
+                    "out_id": out_id,
+                },
+            )
+        except Exception:
+            res = None
+
+        # Normalize result and determine existence
+        exists = False
+        if isinstance(res, list) and len(res) > 0:
+            first = res[0]
+            if (
+                isinstance(first, dict)
+                and "result" in first
+                and isinstance(first["result"], list)
+            ):
+                exists = len(first["result"]) > 0
+            elif isinstance(first, list):
+                exists = len(first) > 0
+            elif all(isinstance(item, dict) for item in res):
+                exists = len(res) > 0
+
+        if exists:
+            return False
+
+        # Create the relation
         self.conn.query(
             f"RELATE {concept1_id}->related->{concept2_id} SET desc = $desc",
             {"desc": desc},
         )
+        return True
 
     def get_all_docs(self) -> list[dict]:
         """Get all documents"""
