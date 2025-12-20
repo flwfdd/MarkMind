@@ -11,10 +11,12 @@ import type { GraphNode } from '@/types'
 
 type TabType = 'search' | 'chat'
 
-const activeTab = ref<TabType>('search')
+const activeTab = ref<TabType>('chat')
 const selectedNode = ref<GraphNode | null>(null)
 const modalOpen = ref(false)
 const droppedNode = ref<GraphNode | null>(null)
+// ID of the node currently highlighted from the search panel hover
+const highlightNodeId = ref<string | null>(null)
 
 function handleNodeClick(node: GraphNode) {
   selectedNode.value = node
@@ -29,6 +31,10 @@ function handleAddToContext(node: GraphNode) {
 function handleRecommendationClick(node: GraphNode) {
   selectedNode.value = node
   modalOpen.value = true
+}
+
+function handleSearchHover(nodeId: string | null) {
+  highlightNodeId.value = nodeId
 }
 </script>
 
@@ -47,12 +53,12 @@ function handleRecommendationClick(node: GraphNode) {
       </div>
 
       <div class="h-full rounded-2xl border-stone-200 bg-white overflow-hidden">
-        <KnowledgeGraph @node-click="handleNodeClick" />
+        <KnowledgeGraph @node-click="handleNodeClick" :highlight-node-id="highlightNodeId" />
       </div>
     </div>
 
     <!-- Side panel -->
-    <div class="w-96 flex flex-col border-l border-stone-200 bg-white">
+    <div class="w-[40%] flex flex-col border-l border-stone-200 bg-white">
       <!-- Tabs -->
       <div class="flex border-b border-stone-200">
         <button :class="[
@@ -77,8 +83,9 @@ function handleRecommendationClick(node: GraphNode) {
 
       <!-- Panel content -->
       <div class="flex-1 overflow-hidden">
-        <SearchPanel v-if="activeTab === 'search'" @node-click="handleNodeClick" />
-        <ChatPanel v-else v-model:dropped-node="droppedNode" />
+        <SearchPanel v-show="activeTab === 'search'" @node-click="handleNodeClick" @node-hover="handleSearchHover" />
+        <ChatPanel v-show="activeTab === 'chat'" v-model:dropped-node="droppedNode" @node-hover="handleSearchHover"
+          @node-click="handleNodeClick" />
       </div>
     </div>
 

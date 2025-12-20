@@ -18,6 +18,20 @@ const emit = defineEmits<{
     nodeHover: [node: GraphNode | null]
 }>()
 
+// Highlight node when parent passes a highlightNodeId (e.g., from search hover)
+watch(
+    () => props.highlightNodeId,
+    (id) => {
+        if (!id) {
+            resetNodeStyles()
+            return
+        }
+        if (graphInstance && graphInstance.hasNode(id)) {
+            highlightConnectedNodes(id)
+        }
+    },
+)
+
 const containerRef = ref<HTMLElement>()
 const loading = ref(true)
 const error = ref<string | null>(null)

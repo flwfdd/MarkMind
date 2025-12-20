@@ -11,6 +11,7 @@ import { getTypeLabel, getBadgeStyle } from '@/lib/nodeTypes'
 
 const emit = defineEmits<{
     nodeClick: [node: GraphNode]
+    nodeHover: [nodeId: string | null]
 }>()
 
 const query = ref('')
@@ -67,7 +68,8 @@ function handleKeydown(e: KeyboardEvent) {
             <div v-else-if="results.length > 0" class="space-y-2">
                 <div v-for="(item, index) in results" :key="item.node.id"
                     class="cursor-pointer rounded-lg border border-stone-200 bg-white p-3 transition-colors hover:bg-stone-50"
-                    @click="emit('nodeClick', item.node)">
+                    @click="emit('nodeClick', item.node)" @mouseenter="emit('nodeHover', item.node.id)"
+                    @mouseleave="emit('nodeHover', null)">
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-2">

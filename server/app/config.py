@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-large"
 
+    # Langfuse Configuration (optional)
+    langfuse_secret_key: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_enabled: bool = False
+
     # SurrealDB Configuration
     surrealdb_url: str = "ws://localhost:8000/rpc"
     surrealdb_namespace: str = "markmind"

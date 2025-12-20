@@ -43,14 +43,33 @@ export interface SearchResult {
 }
 
 // Chat types
+export interface ToolCall {
+    id: string
+    name: string
+    arguments: string // JSON string
+}
+
 export interface ChatMessage {
-    role: string
-    content: string
+    role: 'system' | 'user' | 'assistant' | 'tool'
+    content?: string | null
+    // For assistant messages with tool calls
+    tool_calls?: ToolCall[] | null
+    // For tool response messages
+    tool_call_id?: string | null
     name?: string | null
 }
 
 export interface ChatRequest {
     messages: ChatMessage[]
+}
+
+export interface ChatStreamEvent {
+    event: 'message_delta' | 'message_complete' | 'round_complete' | 'error'
+    messageId?: string | null
+    delta?: string | null
+    message?: ChatMessage | null
+    messages?: ChatMessage[] | null
+    error?: string | null
 }
 
 // Upload types
