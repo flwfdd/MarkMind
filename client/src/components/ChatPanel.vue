@@ -383,8 +383,6 @@ function formatContent(content: string | null | undefined): string {
         }
     )
 
-    console.log('Formatted content:', html)
-
     return html
 }
 

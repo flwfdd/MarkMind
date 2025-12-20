@@ -14,7 +14,7 @@
                         <Button variant="secondary" @click="$emit('close')">取消</Button>
                         <Button @click="handleNext" :disabled="!formData.content || loading">{{ loading ? '处理中...' :
                             '下一步'
-                            }}</Button>
+                        }}</Button>
                     </div>
                 </div>
 
@@ -51,7 +51,8 @@
                                     <Button @click="handleParseUrl" :disabled="!url || parsing">{{ parsing ? '解析中...' :
                                         '解析' }}</Button>
                                 </div>
-                                <div class="text-xs text-stone-400 mt-2">支持 HTML 自动转为 Markdown 或 PDF 下载解析</div>
+                                <div class="text-xs text-stone-400 mt-2">支持解析 HTML、PDF、小红书笔记
+                                </div>
                             </div>
                         </Card>
                     </div>
@@ -67,7 +68,7 @@
                             <label class="block text-sm font-medium mb-1">类型</label>
                             <div class="flex gap-2">
                                 <button
-                                    v-for="opt in [{ value: 'text', label: '文本' }, { value: 'md', label: 'Markdown' }, { value: 'pdf', label: 'PDF' }]"
+                                    v-for="opt in [{ value: 'text', label: '文本' }, { value: 'md', label: 'Markdown' }, { value: 'pdf', label: 'PDF' }, { value: 'xhs', label: '小红书' }]"
                                     :key="opt.value" :class="[
                                         'rounded-lg border px-4 py-2 text-sm transition-colors',
                                         formData.type === opt.value
@@ -89,7 +90,7 @@
                         <div class="flex-1">
                             <label class="block text-sm font-medium mb-1">内容 <span
                                     class="text-xs text-stone-400 ml-2">字数: {{ contentCharCount }} · 预计 tokens: {{
-                                    contentTokenEstimate }}</span></label>
+                                        contentTokenEstimate }}</span></label>
                             <Textarea v-model="formData.content" placeholder="输入或粘贴文档内容" :rows="10" class="h-48" />
                         </div>
                     </Card>

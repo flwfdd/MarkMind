@@ -127,7 +127,7 @@ const linkifiedFullContent = computed(() => {
                 </h2>
                 <p v-if="detail.node.desc" class="mt-1 text-stone-500" v-html="linkifiedDesc"></p>
                 <a v-if="detail.node.url" :href="detail.node.url" target="_blank" rel="noopener noreferrer"
-                    class="text-sm text-stone-600 underline">
+                    class="text-sm text-stone-600 underline break-all">
                     {{ detail.node.url }}
                 </a>
                 <p v-if="detail.node.created_at" class="mt-1 text-xs text-stone-400">

@@ -72,6 +72,58 @@ async def fetch_url_content(url: str) -> tuple[str, str, str]:
     Returns:
         tuple of (title, content, detected_type)
     """
+
+    # Special handling for Xiaohongshu explore pages using included spider
+    try:
+        if "xiaohongshu.com" in url and "/explore/" in url:
+            # Use the utility wrapper which imports spider_xhs low-level APIs safely
+            from app.spiders.xhs import fetch_xhs_note  # type: ignore
+
+            success, msg, note_info = fetch_xhs_note(url)
+
+            if success and note_info:
+                # Build a readable content string from note_info
+                title = note_info.get("title") or url.split("/")[-1]
+                parts = [f"# {title}", ""]
+                desc = note_info.get("desc")
+                # Include author information
+                author = note_info.get("nickname")
+                home = note_info.get("home_url")
+                if author:
+                    author_line = f"作者: {author}"
+                    if home:
+                        author_line = f"{author_line} ({home})"
+                    parts.append(author_line)
+                    parts.append("")
+                if desc:
+                    parts.append(desc)
+                    parts.append("")
+
+                # Append metadata
+                meta_lines = []
+                for k in [
+                    "liked_count",
+                    "collected_count",
+                    "comment_count",
+                    "share_count",
+                    "upload_time",
+                ]:
+                    if note_info.get(k) is not None:
+                        meta_lines.append(f"{k}: {note_info.get(k)}")
+                if meta_lines:
+                    parts.append("---")
+                    parts.extend(meta_lines)
+
+                content = "\n".join(parts)
+                content = sanitize_text(content)
+                return title, content, "xhs"
+    except Exception as e:
+        print(
+            f"Xiaohongshu spider failed, falling back to normal URL fetching. Error: {e}"
+        )
+        # If anything failed with spider, we fall back to normal fetching below
+        pass
+
     async with aiohttp.ClientSession() as session:
         async with session.get(
             url, timeout=aiohttp.ClientTimeout(total=30)

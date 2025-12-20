@@ -163,23 +163,22 @@ async def extract_concepts(
     # Build existing concepts context
     existing_context = ""
     if existing_concepts:
-        existing_context = "\n\nExisting Concepts in the knowledge base:\n"
+        existing_context = "\n\n现有概念库:\n"
         for concept in existing_concepts:
             existing_context += f"- {concept.get('name')}: {concept.get('desc', '')}\n"
-        existing_context += "\nPlease reuse these existing concept names when applicable instead of creating new ones."
 
     prompt = f"""请深入分析以下文档，提取核心概念（实体）及其实体间的逻辑关系。
 
 【执行准则】
 1. **概念提取 (Concepts)**:
-   - **精准凝练**: 仅提取具有独立语义的**专有名词**或**核心术语**（如技术名称、人名、机构、特定算法、产品名）。
-   - **拒绝泛化**: 严禁提取宽泛、无意义的通用词（如“方法”、“过程”、“今天”、“我们”、“效果”）。
-   - **实体对齐 (关键)**: 请先检查【现有概念库】。如果文中概念与库中现有概念同义或指代同一事物（例如文中用“LLM”，库中有“大语言模型”），**必须直接复用库中的标准名称**，不要创建新词。只有当概念确实是全新的时，才创建新条目。
-   - **数量控制**: 提取 1-5 个对理解本文最关键的节点，尽量精简，只提取最核心的。
+   - **精准凝练**: 仅提取具有独立语义的概念或实体（如地名、人名、机构、技术术语等），严禁提取宽泛、无意义的通用词，也不要提取过于狭义的小众词。
+   - **实体对齐 (关键)**: 请先检查【现有概念库】。如果文中概念与库中现有概念同义或指代同一事物（例如文中用“LLM”，库中有“大模型”），**必须直接复用库中的标准名称**，不要创建新词。只有当概念确实是全新的时，才创建新条目。
+   - **数量控制**: 提取至少 1 个，不超过 5 个对理解本文最关键的节点，尽量精简，只提取最核心的，除特殊情况外至少提取一个。
+   - **定义简洁**: 每个概念的描述 ("desc") 必须控制在 20 字以内，做到言简意赅，突出本质特征，不与特定文档内容绑定。
 
 2. **关系构建 (Relations)**:
-   - 仅提取文中明确表述的、有事实依据的关系。
-   - 关系描述 ("desc") 必须是简练的**谓语动词**或**短语**（如“属于”、“导致”、“提出”、“位于”、“包含”），禁止使用长句。
+   - 可选。仅提取普遍的、文中明确表述的、有事实依据的关系，不要臆断或推测，也不要过于狭隘特殊。
+   - 关系描述 ("desc") 必须是简练的谓语动词或短语，禁止使用长句。
 
 【输出格式】
 请仅返回一个纯净的 JSON 对象，格式如下：
@@ -198,6 +197,8 @@ async def extract_concepts(
 文档内容: {content}
 """
 
+    print(prompt)
+
     messages = [
         SystemMessage(
             content="You are an expert at knowledge extraction. Always respond with valid JSON."
@@ -206,6 +207,7 @@ async def extract_concepts(
     ]
 
     response = await llm.ainvoke(messages)
+    print("LLM response for concept extraction:", response.content)
     content = response.content.strip()
 
     # Extract JSON from markdown code blocks if present
