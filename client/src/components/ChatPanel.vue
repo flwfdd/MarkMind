@@ -510,9 +510,14 @@ function scrollToBottom() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        sendMessage()
+    // Do not send on plain Enter. Allow newline with Shift+Enter.
+    // Send only when Ctrl+Enter or Cmd(Meta)+Enter is pressed.
+    if (e.key === 'Enter') {
+        if (e.shiftKey) return
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault()
+            sendMessage()
+        }
     }
 }
 
@@ -682,7 +687,8 @@ function formatToolArgs(args: string): string {
                     class="text-stone-400 hover:text-stone-600">
                     <Trash2 class="h-4 w-4" />
                 </Button>
-                <Input v-model="inputValue" placeholder="输入消息..." class="flex-1" @keydown="handleKeydown" />
+                <Input v-model="inputValue" placeholder="输入消息...（按 Ctrl/Cmd+Enter 发送）" class="flex-1"
+                    @keydown="handleKeydown" />
                 <Button @click="sendMessage" :disabled="loading">
                     <Send class="h-4 w-4" />
                 </Button>

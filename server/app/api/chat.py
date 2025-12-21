@@ -4,6 +4,7 @@ import json
 import uuid
 from typing import AsyncGenerator
 
+import httpx
 from app.config import settings
 from app.database import db
 from app.models import (
@@ -70,15 +71,23 @@ def _record_to_id(val) -> str:
 
 
 # System prompt for the agent
-SYSTEM_PROMPT = """You are a helpful AI assistant with access to a knowledge graph.
-You can search for information, retrieve document details, and explore concepts.
-Always use the available tools to find accurate information before answering questions.
-When you mention or refer to a knowledge-graph node in your reply, ALWAYS use the node-reference format:
-`[[node:<node_id>|Display Name]]` (for example: `[[node:doc:abc123|Example Doc]]`).
-Never invent node IDs — only use IDs returned by tools or the system.
-Prefer Markdown for all replies so the frontend can render content properly.
-When you need document or concept details, call the appropriate tool and include the retrieved result in your answer.
-Respond in the same language as the user's query.
+SYSTEM_PROMPT = """你是 MarkMind Agent，一个高超的个人知识库助手，基于用户的知识图谱进行智能问答和探索。
+你的核心能力包括：搜索信息、检索文档详情以及深入探索相关概念。
+
+请严格遵守以下行为准则：
+
+1. **工具优先**：在回答问题之前，请务必优先调用可用工具以获取准确的事实信息，切勿仅凭记忆或猜测作答。
+2. **引用格式（至关重要）**：
+   当你在回复中提及知识图谱中的任何节点（如文档或概念）时，**必须**严格使用以下专用格式：
+   `[[node:<node_id>|显示名称]]`
+   * 正确示例：`[[node:doc:abc123|深度学习综述]]` `[[node:concept:abc123|大模型]]`
+   * 错误示例：`[深度学习综述](doc:abc123)` 或使用了知识图谱中不存在的 ID 或名称。
+3. **严禁编造 ID**：绝对不允许捏造节点 ID。你只能使用由工具查询或系统返回的真实 ID。外部链接不要用这种格式。
+4. **内容整合**：当调用工具获取到文档或概念详情后，请将检索到的核心结果有机地整合进你的回答中，而不是简单罗列数据。
+
+**输出规范**：
+* 请全程使用 **Markdown** 格式，以便前端正确渲染。
+* 请始终使用与用户提问相同的语言进行回复。
 """
 
 
@@ -203,7 +212,7 @@ async def get_concept_details(concept_id: str) -> str:
         if _record_to_id(m.get("out")) == concept_id
     ]
 
-    result = f"""## Concept: {concept_id}
+    result = f"""## Concept: {concept.get('name', 'Unnamed Concept')}
 
 **Description:** {concept.get('desc', '')}
 
@@ -252,8 +261,60 @@ async def get_concept_details(concept_id: str) -> str:
     return result
 
 
+# Tavily search tool
+@tool
+async def tavily_search(query: str) -> str:
+    """Search the external Tavily API for relevant results.
+
+    Uses the Tavily POST /search API schema and returns a markdown-like summary
+    including the top results and any concise answer returned by Tavily.
+    """
+    # Ensure config
+    if (
+        not settings.tavily_enabled
+        or not settings.tavily_api_key
+        or not settings.tavily_host
+    ):
+        return "Tavily is not configured. Set TAVILY_ENABLED=true and provide TAVILY_API_KEY and TAVILY_HOST in your environment."
+
+    payload = {
+        "query": query,
+        "search_depth": "basic",
+        "auto_parameters": False,
+        "max_results": 20,
+        "include_raw_content": False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{settings.tavily_host.rstrip('/')}/search",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.tavily_api_key}",
+                    "Content-Type": "application/json",
+                },
+            )
+
+            if resp.status_code != 200:
+                return f"Tavily search failed: {resp.status_code} - {resp.text}"
+
+            data = resp.json()
+
+            # Return the raw Tavily JSON response as a string (no additional formatting)
+            return json.dumps(data, ensure_ascii=False)
+
+    except Exception as e:
+        return f"Tavily search error: {str(e)}"
+
+
 # Create tools list
-tools = [search_knowledge_graph, get_document_details, get_concept_details]
+tools = [
+    search_knowledge_graph,
+    get_document_details,
+    get_concept_details,
+    tavily_search,
+]
 
 # Create the ReAct agent
 agent_executor = create_agent(llm, tools)

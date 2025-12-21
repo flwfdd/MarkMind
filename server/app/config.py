@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 200
 
+    # Optional Tavily search integration
+    tavily_api_key: str | None = None
+    tavily_host: str | None = None
+    tavily_enabled: bool = False
+
     # Vector dimension
     embedding_dimension: int = 1024
 

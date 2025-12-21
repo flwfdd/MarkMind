@@ -42,6 +42,15 @@ cp .env.example .env
 
 编辑 `.env` 文件，设置你的 OpenAI API 配置。
 
+如果你有 Tavily 实例并想让 Agent 能调用 Tavily，请在 `.env` 中设置：
+
+```dotenv
+TAVILY_ENABLED=true
+TAVILY_API_KEY=your_key_here
+TAVILY_HOST=https://api.tavily.example
+```
+
+
 ### 3. 启动 SurrealDB
 
 ```bash
