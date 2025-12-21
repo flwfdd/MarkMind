@@ -5,7 +5,7 @@ import Input from '@/components/ui/Input.vue'
 import Button from '@/components/ui/Button.vue'
 import Spinner from '@/components/ui/Spinner.vue'
 import type { ChatMessage, ChatStreamEvent, GraphNode, NodeDetail } from '@/types'
-import { chat, getNodeDetail } from '@/api'
+import { chat, getRecommendations, getNodeDetail } from '@/api'
 import MarkdownIt from 'markdown-it'
 
 // Display message extends ChatMessage with UI state
@@ -16,12 +16,14 @@ interface DisplayMessage extends ChatMessage {
 
 const props = defineProps<{
     droppedNode?: GraphNode | null
+    viewedNode?: GraphNode | null
 }>()
 
 const emit = defineEmits<{
     'update:droppedNode': [node: GraphNode | null]
     'nodeHover': [nodeId: string | null]
     'nodeClick': [node: GraphNode]
+    'add-active-node': [node: GraphNode]
 }>()
 
 // Full conversation history (will be sent to backend)
@@ -37,6 +39,88 @@ const inputValue = ref('')
 const loading = ref(false)
 const messagesContainer = ref<HTMLElement>()
 const pendingNodes = ref<GraphNode[]>([])
+
+// Active node sliding list (most recent first)
+const activeNodes = ref<GraphNode[]>([])
+const activeNodesMax = 10
+
+function addActiveNode(node?: GraphNode | null) {
+    if (!node || !node.id) return
+    const idx = activeNodes.value.findIndex((n) => n.id === node.id)
+    if (idx >= 0) {
+        // move to front
+        const [existing] = activeNodes.value.splice(idx, 1)
+        if (existing) activeNodes.value.unshift(existing)
+    } else {
+        activeNodes.value.unshift(node)
+        if (activeNodes.value.length > activeNodesMax) activeNodes.value.pop()
+    }
+}
+
+// Recommendations
+const recommendations = ref<string[]>([])
+const recLoading = ref(false)
+const recCollapsed = ref(false)
+
+async function fetchRecommendations(contextNodes?: string[] | null) {
+    recLoading.value = true
+    try {
+        // Build messages: include all user messages and the last assistant message without tool_calls
+        const userMessages = conversationHistory.value.filter((m) => m.role === 'user')
+        const lastAssistant = [...conversationHistory.value]
+            .reverse()
+            .find((m) => m.role === 'assistant' && (!m.tool_calls || m.tool_calls.length === 0))
+        const msgsToSend: ChatMessage[] = []
+        userMessages.forEach((m) => msgsToSend.push({ role: m.role, content: m.content }))
+        if (lastAssistant) msgsToSend.push({ role: lastAssistant.role, content: lastAssistant.content })
+
+        const req = {
+            messages: msgsToSend,
+            context: contextNodes ?? pendingNodes.value.map((n) => `${n.label} — ${n.desc || ''}`),
+        }
+        const res = await getRecommendations(req as any)
+        recommendations.value = (res.suggestions || []).map((s: any) => s.text)
+        recCollapsed.value = false
+    } catch (e) {
+        console.error('Failed to fetch recommendations', e)
+        recommendations.value = []
+    } finally {
+        recLoading.value = false
+    }
+}
+
+async function sendSuggestion(text: string) {
+    // Build message content including pending nodes (same as sendMessage)
+    let content = text
+    if (pendingNodes.value.length > 0) {
+        const nodeContext = pendingNodes.value
+            .map((n) => `[[node:${n.id}|${n.label}]]`)
+            .join(' ')
+        content = nodeContext + (content ? '\n\n' + content : '')
+    }
+
+    // Clear suggestions (optional)
+    recommendations.value = []
+
+    // Clear pending nodes (consistent with sendMessage behavior)
+    pendingNodes.value = []
+
+    await sendUserMessage(content)
+}
+
+// Auto-refresh timer: after 1 minute of being idle (no chat), use activeNodes for recommendations
+let idleRecTimer: number | null = null
+function scheduleIdleRecommendations() {
+    if (idleRecTimer) window.clearTimeout(idleRecTimer)
+    idleRecTimer = window.setTimeout(() => {
+        const hasUserMsgs = conversationHistory.value.some((m) => m.role === 'user')
+        if (!hasUserMsgs && activeNodes.value.length > 0) {
+            const ctx = activeNodes.value.map((n) => `${n.label} — ${n.desc || ''}`)
+            fetchRecommendations(ctx)
+        }
+    }, 60 * 1000)
+}
+
 
 // Markdown renderer
 const md = new MarkdownIt({
@@ -66,6 +150,54 @@ function handleNodeMouseOut(e: Event) {
     }
 }
 
+// Watch for modal viewed nodes from parent
+watch(
+    () => props.viewedNode,
+    (node) => {
+        if (node) {
+            addActiveNode(node)
+        }
+    },
+)
+
+onMounted(async () => {
+    if (messagesContainer.value) {
+        messagesContainer.value.addEventListener('mouseover', handleNodeMouseOver)
+        messagesContainer.value.addEventListener('mouseout', handleNodeMouseOut)
+    }
+
+    // Initialize active nodes with most recently updated nodes from graph overview (if available)
+    try {
+        const overview = await import('@/api').then((m) => m.getGraphOverview())
+        if (overview && overview.nodes && overview.nodes.length > 0) {
+            // Prefer nodes with a `created_at` timestamp; sort descending and pick top N
+            const nodes = [...overview.nodes]
+            nodes.sort((a, b) => {
+                const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+                const tb = b.created_at ? new Date(b.created_at).getTime() : 0
+                return tb - ta
+            })
+            // We want the most recently created nodes to be at the front (least likely to be removed).
+            // Since addActiveNode unshifts to the front, iterate in reverse so newest ends up first.
+            for (const n of nodes.slice(0, activeNodesMax).reverse()) {
+                addActiveNode(n)
+            }
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    // Schedule idle recommendations
+    scheduleIdleRecommendations()
+})
+
+onBeforeUnmount(() => {
+    if (messagesContainer.value) {
+        messagesContainer.value.removeEventListener('mouseover', handleNodeMouseOver)
+        messagesContainer.value.removeEventListener('mouseout', handleNodeMouseOut)
+    }
+    if (idleRecTimer) window.clearTimeout(idleRecTimer)
+})
 async function handleNodeClickEvent(e: Event) {
     const target = e.target as HTMLElement | null
     if (!target) return
@@ -128,6 +260,11 @@ watch(
             } else {
                 pendingNodes.value.push(node)
             }
+
+            // Add to active nodes and fetch recommendations
+            addActiveNode(node)
+            fetchRecommendations()
+
             emit('update:droppedNode', null)
         }
     },
@@ -153,20 +290,7 @@ function generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
-async function sendMessage() {
-    const trimmedInput = inputValue.value.trim()
-    if (!trimmedInput && pendingNodes.value.length === 0) return
-    if (loading.value) return
-
-    // Build message content with node references
-    let content = trimmedInput
-    if (pendingNodes.value.length > 0) {
-        const nodeContext = pendingNodes.value
-            .map((n) => `[[node:${n.id}|${n.label}]]`)
-            .join(' ')
-        content = nodeContext + (content ? '\n\n' + content : '')
-    }
-
+async function sendUserMessage(content: string) {
     // Add user message to display
     const userMessage: DisplayMessage = {
         id: generateId(),
@@ -175,10 +299,8 @@ async function sendMessage() {
     }
     displayMessages.value.push(userMessage)
 
-    inputValue.value = ''
-    pendingNodes.value = []
-    loading.value = true
-    streamingContent.value = ''
+    // Clear suggestions when user sends (optional)
+    recommendations.value = []
 
     // Create initial streaming placeholder
     const streamingMessageId = generateId()
@@ -191,6 +313,9 @@ async function sendMessage() {
     displayMessages.value.push(streamingMessage)
 
     scrollToBottom()
+
+    loading.value = true
+    streamingContent.value = ''
 
     try {
         // Build request with current history + new user message
@@ -247,6 +372,27 @@ async function sendMessage() {
             msg.isStreaming = false
         }
     }
+}
+
+async function sendMessage() {
+    const trimmedInput = inputValue.value.trim()
+    if (!trimmedInput && pendingNodes.value.length === 0) return
+    if (loading.value) return
+
+    // Build message content with node references
+    let content = trimmedInput
+    if (pendingNodes.value.length > 0) {
+        const nodeContext = pendingNodes.value
+            .map((n) => `[[node:${n.id}|${n.label}]]`)
+            .join(' ')
+        content = nodeContext + (content ? '\n\n' + content : '')
+    }
+
+    inputValue.value = ''
+    // Clear pending nodes after sending
+    pendingNodes.value = []
+
+    await sendUserMessage(content)
 }
 
 function handleStreamEvent(event: ChatStreamEvent, streamingMessageId: string) {
@@ -338,6 +484,9 @@ function handleStreamEvent(event: ChatStreamEvent, streamingMessageId: string) {
                     ...m,
                     isStreaming: false,
                 }))
+
+                // Auto-refresh recommendations at end of round
+                fetchRecommendations()
             }
             break
 
@@ -410,7 +559,7 @@ function formatToolArgs(args: string): string {
                 <!-- User Message -->
                 <div v-if="message.role === 'user'" class="flex justify-end">
                     <div class="max-w-[85%] rounded-xl px-4 py-3 bg-stone-600 text-stone-50">
-                        <div class="prose prose-sm prose-invert max-w-none" v-html="formatContent(message.content)" />
+                        <div class="prose prose-invert max-w-none" v-html="formatContent(message.content)" />
                     </div>
                 </div>
 
@@ -420,8 +569,7 @@ function formatToolArgs(args: string): string {
                         <!-- Text content -->
                         <div v-if="message.content"
                             class="rounded-xl px-4 py-3 bg-white border border-stone-200 text-stone-700">
-                            <div class="prose prose-sm prose-stone max-w-none"
-                                v-html="formatContent(message.content)" />
+                            <div class="prose prose-stone max-w-none" v-html="formatContent(message.content)" />
                         </div>
 
                         <!-- Tool calls (collapsible) -->
@@ -481,6 +629,48 @@ function formatToolArgs(args: string): string {
                 <span class="text-sm text-stone-600">{{ node.label }}</span>
                 <button class="text-stone-400 hover:text-stone-600" @click="removeNode(index)">
                     <X class="h-3 w-3" />
+                </button>
+            </div>
+        </div>
+
+        <!-- Active nodes slider -->
+        <!-- <div class="border-b border-stone-200 bg-stone-50 px-4 py-3">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <div class="text-sm font-medium text-stone-700">活跃节点</div>
+                    <span class="text-xs text-stone-400">最近查看/加入的节点</span>
+                </div>
+                <div class="text-xs text-stone-400">{{ activeNodes.length }} 个</div>
+            </div>
+            <div class="flex gap-2 overflow-x-auto pb-2">
+                <button v-for="n in activeNodes" :key="n.id" @click="handleActiveNodeClick(n)"
+                    class="flex-none rounded-md px-3 py-1 bg-white border border-stone-200 hover:bg-stone-50">
+                    {{ n.label }}
+                </button>
+            </div>
+        </div> -->
+
+        <!-- Recommendations (collapsible, above context) -->
+        <div class="border-b border-stone-200 bg-stone-50 px-4 py-3">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <button @click="recCollapsed = !recCollapsed"
+                        class="flex items-center gap-2 text-sm font-medium text-stone-700">
+                        <component :is="recCollapsed ? ChevronRight : ChevronDown" class="w-4 h-4 text-stone-700" />
+                        <span>智能洞察</span>
+                    </button>
+                    <span class="text-xs text-stone-400">基于交互历史自动生成</span>
+                </div>
+                <div class="text-xs text-stone-400">{{ recommendations.length }} 条</div>
+            </div>
+
+            <div v-if="!recCollapsed" class="flex flex-col gap-2">
+                <div v-if="recLoading" class="py-2">
+                    <Spinner size="sm" />
+                </div>
+                <button v-for="(r, idx) in recommendations" :key="idx" @click="sendSuggestion(r)"
+                    class="text-left w-full rounded-lg px-3 py-2 text-sm hover:bg-stone-100 transition-colors bg-white border border-stone-200">
+                    {{ r }}
                 </button>
             </div>
         </div>

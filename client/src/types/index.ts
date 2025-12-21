@@ -63,6 +63,19 @@ export interface ChatRequest {
     messages: ChatMessage[]
 }
 
+export interface RecommendationRequest {
+    messages?: ChatMessage[] | null
+    context?: string[] | null
+}
+
+export interface RecommendationItem {
+    text: string
+}
+
+export interface RecommendationResponse {
+    suggestions: RecommendationItem[]
+}
+
 export interface ChatStreamEvent {
     event: 'message_delta' | 'message_complete' | 'round_complete' | 'error'
     messageId?: string | null

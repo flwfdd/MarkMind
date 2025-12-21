@@ -115,6 +115,22 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
 
 
+class RecommendationRequest(BaseModel):
+    """Request to generate recommended follow-up questions"""
+
+    messages: list[ChatMessage] | None = None
+    # Optional list of context textual snippets (e.g., title and short summary)
+    context: Optional[list[str]] = None
+
+
+class RecommendationItem(BaseModel):
+    text: str
+
+
+class RecommendationResponse(BaseModel):
+    suggestions: list[RecommendationItem]
+
+
 class ChatStreamEvent(BaseModel):
     """SSE event types for chat streaming"""
 

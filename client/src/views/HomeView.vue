@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Search, MessageSquare, Library } from 'lucide-vue-next'
+import { Search, MessageSquare, Library, Bot } from 'lucide-vue-next'
 import { RouterLink } from 'vue-router'
 import KnowledgeGraph from '@/components/KnowledgeGraph.vue'
 import SearchPanel from '@/components/SearchPanel.vue'
@@ -76,16 +76,16 @@ function handleSearchHover(nodeId: string | null) {
             ? 'border-b-2 border-stone-600 text-stone-700'
             : 'text-stone-400 hover:text-stone-600',
         ]" @click="activeTab = 'chat'">
-          <MessageSquare class="h-4 w-4" />
-          对话
+          <Bot class="h-4 w-4" />
+          Agent
         </button>
       </div>
 
       <!-- Panel content -->
       <div class="flex-1 overflow-hidden">
         <SearchPanel v-show="activeTab === 'search'" @node-click="handleNodeClick" @node-hover="handleSearchHover" />
-        <ChatPanel v-show="activeTab === 'chat'" v-model:dropped-node="droppedNode" @node-hover="handleSearchHover"
-          @node-click="handleNodeClick" />
+        <ChatPanel v-show="activeTab === 'chat'" v-model:dropped-node="droppedNode" :viewed-node="selectedNode"
+          @node-hover="handleSearchHover" @node-click="handleNodeClick" />
       </div>
     </div>
 

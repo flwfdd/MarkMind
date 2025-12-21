@@ -37,6 +37,8 @@ export async function searchGraph(request: SearchRequest): Promise<SearchResult>
     return res.json()
 }
 
+import type { RecommendationRequest, RecommendationResponse } from '@/types'
+
 // Chat API - returns a ReadableStream for streaming response
 export async function chat(request: ChatRequest): Promise<Response> {
     const res = await fetch(`${API_BASE}/chat/chat`, {
@@ -46,6 +48,16 @@ export async function chat(request: ChatRequest): Promise<Response> {
     })
     if (!res.ok) throw new Error('Failed to send chat message')
     return res
+}
+
+export async function getRecommendations(request: RecommendationRequest): Promise<RecommendationResponse> {
+    const res = await fetch(`${API_BASE}/chat/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+    })
+    if (!res.ok) throw new Error('Failed to fetch recommendations')
+    return res.json()
 }
 
 // Ingest API

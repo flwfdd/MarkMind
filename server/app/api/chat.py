@@ -6,7 +6,15 @@ from typing import AsyncGenerator
 
 from app.config import settings
 from app.database import db
-from app.models import ChatMessage, ChatRequest, ChatStreamEvent, ToolCall
+from app.models import (
+    ChatMessage,
+    ChatRequest,
+    ChatStreamEvent,
+    RecommendationItem,
+    RecommendationRequest,
+    RecommendationResponse,
+    ToolCall,
+)
 from app.utils import get_embedding, llm
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -42,6 +50,25 @@ if (
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
+
+def _record_to_id(val) -> str:
+    """Normalize a record-like value into a string ID"""
+    if val is None:
+        return ""
+    if hasattr(val, "table_name") and hasattr(val, "record_id"):
+        try:
+            return f"{val.table_name}:{val.record_id}"
+        except Exception:
+            return str(val)
+    if isinstance(val, dict):
+        if "id" in val:
+            return str(val["id"])
+        if "table" in val and "id" in val:
+            return f"{val['table']}:{val['id']}"
+        return str(val)
+    return str(val)
+
+
 # System prompt for the agent
 SYSTEM_PROMPT = """You are a helpful AI assistant with access to a knowledge graph.
 You can search for information, retrieve document details, and explore concepts.
@@ -76,22 +103,6 @@ async def search_knowledge_graph(query: str) -> str:
 
     if chunk_results:
         result_text += "### Relevant Content:\n"
-
-        def _record_to_id(val) -> str:
-            if val is None:
-                return ""
-            if hasattr(val, "table_name") and hasattr(val, "record_id"):
-                try:
-                    return f"{val.table_name}:{val.record_id}"
-                except Exception:
-                    return str(val)
-            if isinstance(val, dict):
-                if "id" in val:
-                    return str(val["id"])
-                if "table" in val and "id" in val:
-                    return f"{val['table']}:{val['id']}"
-                return str(val)
-            return str(val)
 
         for i, (chunk, score) in enumerate(chunk_results, 1):
             text = chunk.get("text", "")[:300]
@@ -136,22 +147,6 @@ async def get_document_details(doc_id: str) -> str:
 
     # Find concepts directly connected to this document via mentions
     mentions = db.get_all_mentions()
-
-    def _record_to_id(val) -> str:
-        if val is None:
-            return ""
-        if hasattr(val, "table_name") and hasattr(val, "record_id"):
-            try:
-                return f"{val.table_name}:{val.record_id}"
-            except Exception:
-                return str(val)
-        if isinstance(val, dict):
-            if "id" in val:
-                return str(val["id"])
-            if "table" in val and "id" in val:
-                return f"{val['table']}:{val['id']}"
-            return str(val)
-        return str(val)
 
     connected_concepts = [
         _record_to_id(m.get("out"))
@@ -202,22 +197,6 @@ async def get_concept_details(concept_id: str) -> str:
 
     mentions = db.get_all_mentions()
 
-    def _record_to_id(val) -> str:
-        if val is None:
-            return ""
-        if hasattr(val, "table_name") and hasattr(val, "record_id"):
-            try:
-                return f"{val.table_name}:{val.record_id}"
-            except Exception:
-                return str(val)
-        if isinstance(val, dict):
-            if "id" in val:
-                return str(val["id"])
-            if "table" in val and "id" in val:
-                return f"{val['table']}:{val['id']}"
-            return str(val)
-        return str(val)
-
     related_docs = [
         _record_to_id(m.get("in"))
         for m in mentions
@@ -249,22 +228,6 @@ async def get_concept_details(concept_id: str) -> str:
     # Also include related concepts (both outgoing and incoming edges)
     related_edges = db.get_all_related()
     neighbors: list[str] = []
-
-    def _record_to_id(val) -> str:
-        if val is None:
-            return ""
-        if hasattr(val, "table_name") and hasattr(val, "record_id"):
-            try:
-                return f"{val.table_name}:{val.record_id}"
-            except Exception:
-                return str(val)
-        if isinstance(val, dict):
-            if "id" in val:
-                return str(val["id"])
-            if "table" in val and "id" in val:
-                return f"{val['table']}:{val['id']}"
-            return str(val)
-        return str(val)
 
     for r in related_edges:
         in_id = _record_to_id(r.get("in"))
@@ -559,3 +522,63 @@ async def chat(request: ChatRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
+
+
+@router.post("/recommend")
+async def recommend(request: RecommendationRequest):
+    """Generate follow-up question recommendations based on provided context.
+
+    Accepts:
+    - `messages`: optional list of recent chat messages (ChatMessage)
+    - `context`: optional list of strings (textual context, e.g., title + short summary)
+
+    Returns a JSON list of recommendation strings (fixed max 5).
+    """
+    db.connect()
+
+    req = request
+
+    # Build prompt
+    user_context = ""
+    if req.messages:
+        # use the last few messages (trim for safety)
+        last_msgs = req.messages[-10:]
+        user_context += "Recent messages:\n"
+        for m in last_msgs:
+            user_context += f"- {m.role}: {m.content}\n"
+
+    if req.context:
+        user_context += "\nContext snippets:\n"
+        for c in req.context:
+            user_context += f"- {c}\n"
+
+    LIMIT = 3
+    system = SystemMessage(
+        content="You are an assistant that generates concise, actionable follow-up questions to help the user explore the knowledge graph or clarify their needs. Output a JSON array of short questions in the user's language."
+    )
+    prompt = f"请基于以下上下文（用户语言），生成不超过 {LIMIT} 条推荐性问题（简短、可直接发送）：\n\n{user_context}\n\n要求：只返回一个 JSON 对象：{ '{"suggestions": ["问法1","问法2"]}' }，不要包含额外文本。"
+
+    messages = [system, HumanMessage(content=prompt)]
+
+    try:
+        resp = await llm.ainvoke(messages)
+        raw = str(resp.content).strip()
+
+        # Extract JSON if inside code block
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0].strip()
+
+        data = json.loads(raw)
+        suggestions = data.get("suggestions", [])
+        # Ensure limit and sanitize
+        suggestions = [s for s in suggestions if isinstance(s, str) and s.strip()][
+            :LIMIT
+        ]
+
+        return RecommendationResponse(
+            suggestions=[RecommendationItem(text=s) for s in suggestions]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Recommendation error: {str(e)}")
