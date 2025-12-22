@@ -412,7 +412,7 @@ defineExpose({
                 <span class="h-3 w-3 rounded-full" :style="{ backgroundColor: conceptColor }" />
                 <span>概念</span>
             </div>
-            <div class="mt-2">
+            <div class="mx-auto mt-2">
                 <button @click="applyLayout(true)" :disabled="isLayingOut"
                     class="rounded bg-stone-100 px-2 py-1 text-xs text-stone-700 hover:bg-stone-50 disabled:opacity-50">
                     <span v-if="isLayingOut" class="inline-flex items-center gap-2">
@@ -421,6 +421,8 @@ defineExpose({
                     <span v-else>优化布局</span>
                 </button>
             </div>
+            <a href="https://github.com/flwfdd/MarkMind" target="_blank" rel="noopener noreferrer"
+                class="mx-auto text-xs text-stone-600 hover:underline">GitHub</a>
         </div>
     </div>
 </template>
